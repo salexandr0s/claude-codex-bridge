@@ -15,7 +15,7 @@
 ## Current state
 - Repo: `/Users/nationalbank/GitHub/claude-codex-bridge`
 - Branch: `main`
-- Latest commit: `1b407bc` `docs(bridge): prepare public release`
+- HEAD: run `git log -1 --oneline` for the latest commit.
 - Remote: `https://github.com/salexandr0s/claude-codex-bridge`
 - Visibility: `PUBLIC`
 - Local Claude MCP config includes `claude-codex-bridge`.
