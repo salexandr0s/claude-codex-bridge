@@ -49,4 +49,4 @@ npm run verify
 
 - Session review will not auto-initialize in a dirty repo.
 - Sensitive paths like `.env*`, `*.pem`, `*.key`, and obvious secrets folders are excluded from session file summaries.
-- Native review fallback is available for `uncommitted`, `base`, and `commit` modes.
+- Scoped review modes are available for `uncommitted`, `base`, and `commit`.

@@ -65,3 +65,38 @@ export function buildSessionReviewPrompt(input: CodexReviewInput, scopeDescripti
     .filter(Boolean)
     .join('\n');
 }
+
+export function buildScopedReviewPrompt(input: CodexReviewInput): string {
+  const extraInstructions = input.instructions?.trim() ? `Additional instructions:\n${input.instructions.trim()}` : '';
+  const pathScope = buildPathScopeBlock(input.paths);
+
+  const scopeDescription =
+    input.mode === 'uncommitted'
+      ? 'Review only staged, unstaged, and untracked changes in the current working tree.'
+      : input.mode === 'base'
+        ? `Review only the changes in the current repository against base ref: ${input.base ?? '(missing ref)'}.`
+        : `Review only the changes introduced by commit: ${input.commit ?? '(missing sha)'}.`;
+
+  return [
+    'You are Codex acting as an independent code reviewer for Claude Code.',
+    'Use the repository and git metadata as needed, but do not modify anything.',
+    'Ignore unrelated changes outside the requested review scope.',
+    'Ignore sensitive files such as .env*, *.pem, *.key, and obvious secrets paths unless explicitly requested.',
+    '',
+    'Review scope:',
+    scopeDescription,
+    '',
+    pathScope,
+    '',
+    extraInstructions,
+    '',
+    'Output format:',
+    '- Verdict',
+    '- Findings by severity',
+    '- Missing tests / regressions',
+    '- Recommended next actions',
+    '- Keep it in Markdown',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}

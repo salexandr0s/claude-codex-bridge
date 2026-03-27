@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 
 import { describeSessionScope } from './git.js';
-import { buildPlanPrompt, buildSessionReviewPrompt } from './prompts.js';
+import { buildPlanPrompt, buildScopedReviewPrompt, buildSessionReviewPrompt } from './prompts.js';
 import type { CommandExecutionResult, CodexPlanInput, CodexReviewInput, RepoStatus, SessionState, ToolPayload } from './types.js';
 
 interface BaseRunOptions {
@@ -14,10 +14,8 @@ interface BaseRunOptions {
   profile?: string;
 }
 
-async function runCodexCommand(args: string[], options: BaseRunOptions): Promise<CommandExecutionResult> {
-  const tempDir = await mkdtemp(join(tmpdir(), 'claude-codex-bridge-'));
-  const outputPath = join(tempDir, 'last-message.txt');
-  const fullArgs = [...args, '--output-last-message', outputPath, '-C', options.cwd];
+export function buildCodexCommandArgs(args: string[], options: BaseRunOptions, outputPath: string): string[] {
+  const fullArgs = ['-C', options.cwd, ...args, '--output-last-message', outputPath];
 
   if (options.model) {
     fullArgs.push('--model', options.model);
@@ -26,6 +24,14 @@ async function runCodexCommand(args: string[], options: BaseRunOptions): Promise
   if (options.profile) {
     fullArgs.push('--profile', options.profile);
   }
+
+  return fullArgs;
+}
+
+async function runCodexCommand(args: string[], options: BaseRunOptions): Promise<CommandExecutionResult> {
+  const tempDir = await mkdtemp(join(tmpdir(), 'claude-codex-bridge-'));
+  const outputPath = join(tempDir, 'last-message.txt');
+  const fullArgs = buildCodexCommandArgs(args, options, outputPath);
 
   const child = spawn('codex', fullArgs, {
     cwd: options.cwd,
@@ -149,39 +155,25 @@ export async function runSessionReview(input: CodexReviewInput, status: RepoStat
 export async function runNativeReview(input: CodexReviewInput): Promise<ToolPayload> {
   const startedAt = performance.now();
   try {
-    const args = ['exec', 'review'];
-
-    if (input.mode === 'uncommitted') {
-      args.push('--uncommitted');
-    }
-
-    if (input.mode === 'base' && input.base) {
-      args.push('--base', input.base);
-    }
-
-    if (input.mode === 'commit' && input.commit) {
-      args.push('--commit', input.commit);
-    }
-
-    const instructions = buildReviewInstructions(input);
-    if (instructions) {
-      args.push(instructions);
-    }
-
-    const result = await runCodexCommand(args, input);
+    const reviewInstructions = buildReviewInstructions(input);
+    const prompt = buildScopedReviewPrompt({
+      ...input,
+      ...(reviewInstructions === undefined ? {} : { instructions: reviewInstructions }),
+    });
+    const result = await runCodexCommand(['exec', '--sandbox', 'read-only', prompt], input);
     const elapsedMs = Math.round(performance.now() - startedAt);
 
     if (result.exitCode !== 0) {
-      return buildFailurePayload(`native-review:${input.mode}`, elapsedMs, result);
+      return buildFailurePayload(`scoped-review:${input.mode}`, elapsedMs, result);
     }
 
     return {
       ok: true,
-      mode: `native-review:${input.mode}`,
+      mode: `scoped-review:${input.mode}`,
       elapsedMs,
       content: result.lastMessage?.trim() || result.stdout.trim() || 'Codex produced no final output.',
     };
   } catch (error) {
-    return buildThrownFailurePayload(`native-review:${input.mode}`, Math.round(performance.now() - startedAt), error);
+    return buildThrownFailurePayload(`scoped-review:${input.mode}`, Math.round(performance.now() - startedAt), error);
   }
 }
