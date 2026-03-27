@@ -1,3 +1,5 @@
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+
 import type { ToolPayload } from './types.js';
 
 export function formatToolText(payload: ToolPayload): string {
@@ -15,7 +17,7 @@ export function formatToolText(payload: ToolPayload): string {
   return lines.join('\n');
 }
 
-export function toToolResult(payload: ToolPayload): { content: Array<{ type: 'text'; text: string }>; isError?: boolean } {
+export function toToolResult(payload: ToolPayload): CallToolResult {
   return {
     content: [
       {

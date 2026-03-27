@@ -18,9 +18,10 @@ Examples:
 ## How it works
 
 - Claude talks to a local MCP server from this repo.
-- The MCP server shells out to `codex exec` / `codex exec review`.
+- The MCP server shells out to `codex exec`.
 - Session review is repo-local and baseline-based.
 - Codex runs read-only by default.
+- `codex_plan` and `codex_review` advertise MCP task support so task-aware clients can avoid the default 60s request ceiling on long runs.
 
 ## Install
 
@@ -43,6 +44,7 @@ npm run lint
 npm run build
 npm run test
 npm run verify
+npm run smoke:tasks
 ```
 
 ## Notes

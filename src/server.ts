@@ -1,12 +1,14 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { InMemoryTaskMessageQueue, InMemoryTaskStore } from '@modelcontextprotocol/sdk/experimental/tasks';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
 import { getRepoStatus } from './git.js';
 import { runNativeReview, runPlan, runSessionReview } from './codex.js';
 import { toToolResult } from './result.js';
 import { loadSessionState, resetSessionState, saveSessionState } from './session-state.js';
-import type { CodexPlanInput, CodexReviewInput, SessionState } from './types.js';
+import type { CodexPlanInput, CodexReviewInput, SessionState, ToolPayload } from './types.js';
 
 function makeDirtyRepoMessage(cwd: string): string {
   return [
@@ -26,12 +28,69 @@ function makeInitializedMessage(state: SessionState): string {
   ].join('\n');
 }
 
-const server = new McpServer({
-  name: 'claude-codex-bridge',
-  version: '0.1.0',
-});
+const taskStore = new InMemoryTaskStore();
+const taskMessageQueue = new InMemoryTaskMessageQueue();
 
-server.registerTool(
+const server = new McpServer(
+  {
+    name: 'claude-codex-bridge',
+    version: '0.1.0',
+  },
+  {
+    capabilities: {
+      tasks: {
+        requests: {
+          tools: {
+            call: {},
+          },
+        },
+      },
+    },
+    defaultTaskPollInterval: 1000,
+    taskStore,
+    taskMessageQueue,
+  },
+);
+
+function toTaskResult(payload: ToolPayload): { status: 'completed' | 'failed'; result: CallToolResult } {
+  return {
+    status: payload.ok ? 'completed' : 'failed',
+    result: toToolResult(payload),
+  };
+}
+
+function createTaskOptions(taskRequestedTtl: number | null | undefined): { ttl?: number | null } {
+  return taskRequestedTtl === undefined ? {} : { ttl: taskRequestedTtl };
+}
+
+async function storeTaskPayload(
+  taskId: string,
+  taskStore: {
+    storeTaskResult: (taskId: string, status: 'completed' | 'failed', result: CallToolResult) => Promise<void>;
+  },
+  work: () => Promise<ToolPayload>,
+): Promise<void> {
+  try {
+    const payload = await work();
+    const taskResult = toTaskResult(payload);
+    await taskStore.storeTaskResult(taskId, taskResult.status, taskResult.result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await taskStore.storeTaskResult(
+      taskId,
+      'failed',
+      toToolResult({
+        ok: false,
+        mode: 'task-execution',
+        elapsedMs: 0,
+        error: 'Task execution failed.',
+        content: message,
+      }),
+    );
+  }
+}
+
+server.experimental.tasks.registerToolTask(
   'codex_plan',
   {
     title: 'Codex Plan',
@@ -44,14 +103,28 @@ server.registerTool(
       model: z.string().optional(),
       profile: z.string().optional(),
     },
+    execution: {
+      taskSupport: 'optional',
+    },
   },
-  async (args) => {
-    const payload = await runPlan(args as CodexPlanInput);
-    return toToolResult(payload);
+  {
+    async createTask(args, { taskStore, taskRequestedTtl }) {
+      const task = await taskStore.createTask(createTaskOptions(taskRequestedTtl));
+
+      void storeTaskPayload(task.taskId, taskStore, async () => await runPlan(args as CodexPlanInput));
+
+      return { task };
+    },
+    async getTask(_args, { taskId, taskStore }) {
+      return await taskStore.getTask(taskId);
+    },
+    async getTaskResult(_args, { taskId, taskStore }) {
+      return (await taskStore.getTaskResult(taskId)) as CallToolResult;
+    },
   },
 );
 
-server.registerTool(
+server.experimental.tasks.registerToolTask(
   'codex_review',
   {
     title: 'Codex Review',
@@ -66,70 +139,101 @@ server.registerTool(
       model: z.string().optional(),
       profile: z.string().optional(),
     },
+    execution: {
+      taskSupport: 'optional',
+    },
   },
-  async (args) => {
-    const input = args as CodexReviewInput;
+  {
+    async createTask(args, { taskStore, taskRequestedTtl }) {
+      const input = args as CodexReviewInput;
 
-    if (input.mode === 'base' && !input.base) {
-      return toToolResult({
-        ok: false,
-        mode: 'base',
-        elapsedMs: 0,
-        error: 'Missing required input: base',
-        content: 'Provide a base branch when mode="base".',
-      });
-    }
-
-    if (input.mode === 'commit' && !input.commit) {
-      return toToolResult({
-        ok: false,
-        mode: 'commit',
-        elapsedMs: 0,
-        error: 'Missing required input: commit',
-        content: 'Provide a commit SHA when mode="commit".',
-      });
-    }
-
-    if (input.mode !== 'session') {
-      return toToolResult(await runNativeReview(input));
-    }
-
-    const status = await getRepoStatus(input.cwd);
-    const existingState = await loadSessionState(status.repoRoot);
-
-    if (!existingState) {
-      if (status.isDirty) {
-        return toToolResult({
-          ok: false,
-          mode: 'session',
-          elapsedMs: 0,
-          error: 'Cannot initialize a session baseline in a dirty repository.',
-          content: makeDirtyRepoMessage(status.repoRoot),
-        });
+      if (input.mode === 'base' && !input.base) {
+        const task = await taskStore.createTask(createTaskOptions(taskRequestedTtl));
+        await taskStore.storeTaskResult(
+          task.taskId,
+          'failed',
+          toToolResult({
+            ok: false,
+            mode: 'base',
+            elapsedMs: 0,
+            error: 'Missing required input: base',
+            content: 'Provide a base branch when mode="base".',
+          }),
+        );
+        return { task };
       }
 
-      const state: SessionState = {
-        repoRoot: status.repoRoot,
-        baselineCommitSha: status.headSha,
-        baselineBranch: status.branch,
-        createdAt: new Date().toISOString(),
-        dirtyAtStart: false,
-      };
-      await saveSessionState(state);
+      if (input.mode === 'commit' && !input.commit) {
+        const task = await taskStore.createTask(createTaskOptions(taskRequestedTtl));
+        await taskStore.storeTaskResult(
+          task.taskId,
+          'failed',
+          toToolResult({
+            ok: false,
+            mode: 'commit',
+            elapsedMs: 0,
+            error: 'Missing required input: commit',
+            content: 'Provide a commit SHA when mode="commit".',
+          }),
+        );
+        return { task };
+      }
 
-      return toToolResult({
-        ok: true,
-        mode: 'session-init',
-        elapsedMs: 0,
-        content: makeInitializedMessage(state),
+      const task = await taskStore.createTask(createTaskOptions(taskRequestedTtl));
+
+      void storeTaskPayload(task.taskId, taskStore, async () => {
+        let payload: ToolPayload;
+
+        if (input.mode !== 'session') {
+          payload = await runNativeReview(input);
+        } else {
+          const status = await getRepoStatus(input.cwd);
+          const existingState = await loadSessionState(status.repoRoot);
+
+          if (!existingState) {
+            if (status.isDirty) {
+              payload = {
+                ok: false,
+                mode: 'session',
+                elapsedMs: 0,
+                error: 'Cannot initialize a session baseline in a dirty repository.',
+                content: makeDirtyRepoMessage(status.repoRoot),
+              };
+            } else {
+              const state: SessionState = {
+                repoRoot: status.repoRoot,
+                baselineCommitSha: status.headSha,
+                baselineBranch: status.branch,
+                createdAt: new Date().toISOString(),
+                dirtyAtStart: false,
+              };
+              await saveSessionState(state);
+              payload = {
+                ok: true,
+                mode: 'session-init',
+                elapsedMs: 0,
+                content: makeInitializedMessage(state),
+              };
+            }
+          } else {
+            payload = await runSessionReview(input, status, existingState);
+            if (payload.ok) {
+              await saveSessionState({ ...existingState, lastReviewAt: new Date().toISOString() });
+            }
+          }
+        }
+
+        return payload;
       });
-    }
 
-    const payload = await runSessionReview(input, status, existingState);
-    if (payload.ok) {
-      await saveSessionState({ ...existingState, lastReviewAt: new Date().toISOString() });
-    }
-    return toToolResult(payload);
+      return { task };
+    },
+    async getTask(_args, { taskId, taskStore }) {
+      return await taskStore.getTask(taskId);
+    },
+    async getTaskResult(_args, { taskId, taskStore }) {
+      return (await taskStore.getTaskResult(taskId)) as CallToolResult;
+    },
   },
 );
 
