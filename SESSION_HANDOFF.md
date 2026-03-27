@@ -1,31 +1,39 @@
 # Session Handoff
 
 ## What was done
-- Created `claude-codex-bridge` as a new TypeScript MCP server project.
+- Created `claude-codex-bridge` as a local-first TypeScript MCP server and Claude command pack.
 - Implemented MCP tools: `codex_plan`, `codex_review`, `codex_session_status`, `codex_session_reset`.
 - Added Claude commands: `/codexplan`, `/codexreview`, `/codexsession`.
-- Added local installer that copies the commands and updates `~/.claude/.mcp.json`.
-- Installed the bridge into the local Claude setup.
-- Verified with lint, build, tests, a real `codex exec` smoke test, MCP tool listing, and an end-to-end MCP `codex_plan` smoke test.
-- Committed as `feat(bridge): scaffold claude codex delegation server`.
+- Added local installer that copies commands and updates `~/.claude/.mcp.json`.
 - Added explicit `/codexreview` mode parsing for `uncommitted`, `base <ref>`, and `commit <sha>`.
-- Fixed scoped review backend execution so those modes no longer depend on the incompatible `codex exec review` prompt path.
+- Fixed scoped review execution to use prompt-based `codex exec` review flows.
+- Enabled MCP task-backed execution for long-running `codex_plan` and `codex_review` calls.
+- Added a task smoke harness: `npm run smoke:tasks`.
+- Rewrote the README for public release and added an ISC `LICENSE` file.
 
 ## Current state
 - Repo: `/Users/nationalbank/GitHub/claude-codex-bridge`
-- Commit: `(update after next commit)`
+- Branch: `main`
+- Latest local commit before current uncommitted docs/metadata updates: `55fa12f` `fix(bridge): enable task-backed codex tool runs`
 - Local Claude MCP config includes `claude-codex-bridge`.
 - Local Claude commands are copied from this repo.
+
+## Verification
+```bash
+cd ~/GitHub/claude-codex-bridge
+npm run verify
+npm run smoke:tasks
+```
 
 ## Resume commands
 ```bash
 cd ~/GitHub/claude-codex-bridge
 git status
 npm run verify
+npm run smoke:tasks
 ```
 
 ## Unfinished / next likely work
-- Add richer structured MCP output instead of text-only results.
-- Optionally add a dedicated automated stdio MCP integration test to the repo (manual smoke test already passed).
-- Optionally polish the installer to merge configs more defensively.
-- Create/publish a GitHub remote for the project.
+- Commit the public-release docs/metadata pass.
+- Create the public GitHub repo and push `main`.
+- After publishing, verify the remote URL and repo visibility.

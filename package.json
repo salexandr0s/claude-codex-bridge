@@ -3,6 +3,14 @@
   "version": "0.1.0",
   "description": "Local MCP-backed bridge that lets Claude delegate planning and review tasks to Codex CLI.",
   "main": "dist/src/server.js",
+  "homepage": "https://github.com/salexandr0s/claude-codex-bridge#readme",
+  "bugs": {
+    "url": "https://github.com/salexandr0s/claude-codex-bridge/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/salexandr0s/claude-codex-bridge.git"
+  },
   "scripts": {
     "test": "vitest run",
     "build": "tsc -p tsconfig.json",
