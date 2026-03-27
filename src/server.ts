@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import { getRepoStatus } from './git.js';
 import { runNativeReview, runPlan, runSessionReview } from './codex.js';
-import { formatToolText, toToolResult } from './result.js';
+import { toToolResult } from './result.js';
 import { loadSessionState, resetSessionState, saveSessionState } from './session-state.js';
 import type { CodexPlanInput, CodexReviewInput, SessionState } from './types.js';
 
@@ -117,9 +117,12 @@ server.registerTool(
       };
       await saveSessionState(state);
 
-      return {
-        content: [{ type: 'text', text: makeInitializedMessage(state) }],
-      };
+      return toToolResult({
+        ok: true,
+        mode: 'session-init',
+        elapsedMs: 0,
+        content: makeInitializedMessage(state),
+      });
     }
 
     const payload = await runSessionReview(input, status, existingState);
@@ -144,30 +147,26 @@ server.registerTool(
     const state = await loadSessionState(status.repoRoot);
 
     if (!state) {
-      return {
-        content: [{ type: 'text', text: 'No repo baseline exists yet for this repository.' }],
-      };
+      return toToolResult({
+        ok: true,
+        mode: 'session-status',
+        elapsedMs: 0,
+        content: 'No repo baseline exists yet for this repository.',
+      });
     }
 
-    return {
+    return toToolResult({
+      ok: true,
+      mode: 'session-status',
+      elapsedMs: 0,
       content: [
-        {
-          type: 'text',
-          text: formatToolText({
-            ok: true,
-            mode: 'session-status',
-            elapsedMs: 0,
-            content: [
-              `Repo root: ${state.repoRoot}`,
-              `Baseline branch: ${state.baselineBranch}`,
-              `Baseline commit: ${state.baselineCommitSha}`,
-              `Created at: ${state.createdAt}`,
-              `Last review at: ${state.lastReviewAt ?? '(never)'}`,
-            ].join('\n'),
-          }),
-        },
-      ],
-    };
+        `Repo root: ${state.repoRoot}`,
+        `Baseline branch: ${state.baselineBranch}`,
+        `Baseline commit: ${state.baselineCommitSha}`,
+        `Created at: ${state.createdAt}`,
+        `Last review at: ${state.lastReviewAt ?? '(never)'}`,
+      ].join('\n'),
+    });
   },
 );
 
@@ -184,9 +183,12 @@ server.registerTool(
     const status = await getRepoStatus(args.cwd as string);
     await resetSessionState(status.repoRoot);
 
-    return {
-      content: [{ type: 'text', text: `Reset repo baseline for ${status.repoRoot}` }],
-    };
+    return toToolResult({
+      ok: true,
+      mode: 'session-reset',
+      elapsedMs: 0,
+      content: `Reset repo baseline for ${status.repoRoot}`,
+    });
   },
 );
 

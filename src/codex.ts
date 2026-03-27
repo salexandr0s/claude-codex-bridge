@@ -76,74 +76,112 @@ function buildFailurePayload(mode: string, elapsedMs: number, result: CommandExe
   };
 }
 
-export async function runPlan(input: CodexPlanInput): Promise<ToolPayload> {
-  const startedAt = performance.now();
-  const prompt = buildPlanPrompt(input);
-  const result = await runCodexCommand(['exec', '--sandbox', 'read-only', prompt], input);
-  const elapsedMs = Math.round(performance.now() - startedAt);
+function buildThrownFailurePayload(mode: string, elapsedMs: number, error: unknown): ToolPayload {
+  const detail = error instanceof Error ? error.message : String(error);
+  return {
+    ok: false,
+    mode,
+    elapsedMs,
+    error: 'Codex command could not be started.',
+    content: detail,
+  };
+}
 
-  if (result.exitCode !== 0) {
-    return buildFailurePayload('plan', elapsedMs, result);
+function buildReviewInstructions(input: CodexReviewInput): string | undefined {
+  const extras: string[] = [];
+
+  if (input.instructions?.trim()) {
+    extras.push(input.instructions.trim());
   }
 
-  return {
-    ok: true,
-    mode: 'plan',
-    elapsedMs,
-    content: result.lastMessage?.trim() || result.stdout.trim() || 'Codex produced no final output.',
-  };
+  if (input.paths && input.paths.length > 0) {
+    extras.push(`Focus on these paths:\n${input.paths.map((path) => `- ${path}`).join('\n')}`);
+  }
+
+  return extras.length > 0 ? extras.join('\n\n') : undefined;
+}
+
+export async function runPlan(input: CodexPlanInput): Promise<ToolPayload> {
+  const startedAt = performance.now();
+  try {
+    const prompt = buildPlanPrompt(input);
+    const result = await runCodexCommand(['exec', '--sandbox', 'read-only', prompt], input);
+    const elapsedMs = Math.round(performance.now() - startedAt);
+
+    if (result.exitCode !== 0) {
+      return buildFailurePayload('plan', elapsedMs, result);
+    }
+
+    return {
+      ok: true,
+      mode: 'plan',
+      elapsedMs,
+      content: result.lastMessage?.trim() || result.stdout.trim() || 'Codex produced no final output.',
+    };
+  } catch (error) {
+    return buildThrownFailurePayload('plan', Math.round(performance.now() - startedAt), error);
+  }
 }
 
 export async function runSessionReview(input: CodexReviewInput, status: RepoStatus, state: SessionState): Promise<ToolPayload> {
   const startedAt = performance.now();
-  const scopeDescription = await describeSessionScope(status, state);
-  const prompt = buildSessionReviewPrompt(input, scopeDescription);
-  const result = await runCodexCommand(['exec', '--sandbox', 'read-only', prompt], input);
-  const elapsedMs = Math.round(performance.now() - startedAt);
+  try {
+    const scopeDescription = await describeSessionScope(status, state);
+    const prompt = buildSessionReviewPrompt(input, scopeDescription);
+    const result = await runCodexCommand(['exec', '--sandbox', 'read-only', prompt], input);
+    const elapsedMs = Math.round(performance.now() - startedAt);
 
-  if (result.exitCode !== 0) {
-    return buildFailurePayload('session-review', elapsedMs, result);
+    if (result.exitCode !== 0) {
+      return buildFailurePayload('session-review', elapsedMs, result);
+    }
+
+    return {
+      ok: true,
+      mode: 'session-review',
+      elapsedMs,
+      content: result.lastMessage?.trim() || result.stdout.trim() || 'Codex produced no final output.',
+    };
+  } catch (error) {
+    return buildThrownFailurePayload('session-review', Math.round(performance.now() - startedAt), error);
   }
-
-  return {
-    ok: true,
-    mode: 'session-review',
-    elapsedMs,
-    content: result.lastMessage?.trim() || result.stdout.trim() || 'Codex produced no final output.',
-  };
 }
 
 export async function runNativeReview(input: CodexReviewInput): Promise<ToolPayload> {
   const startedAt = performance.now();
-  const args = ['exec', 'review'];
+  try {
+    const args = ['exec', 'review'];
 
-  if (input.mode === 'uncommitted') {
-    args.push('--uncommitted');
+    if (input.mode === 'uncommitted') {
+      args.push('--uncommitted');
+    }
+
+    if (input.mode === 'base' && input.base) {
+      args.push('--base', input.base);
+    }
+
+    if (input.mode === 'commit' && input.commit) {
+      args.push('--commit', input.commit);
+    }
+
+    const instructions = buildReviewInstructions(input);
+    if (instructions) {
+      args.push(instructions);
+    }
+
+    const result = await runCodexCommand(args, input);
+    const elapsedMs = Math.round(performance.now() - startedAt);
+
+    if (result.exitCode !== 0) {
+      return buildFailurePayload(`native-review:${input.mode}`, elapsedMs, result);
+    }
+
+    return {
+      ok: true,
+      mode: `native-review:${input.mode}`,
+      elapsedMs,
+      content: result.lastMessage?.trim() || result.stdout.trim() || 'Codex produced no final output.',
+    };
+  } catch (error) {
+    return buildThrownFailurePayload(`native-review:${input.mode}`, Math.round(performance.now() - startedAt), error);
   }
-
-  if (input.mode === 'base' && input.base) {
-    args.push('--base', input.base);
-  }
-
-  if (input.mode === 'commit' && input.commit) {
-    args.push('--commit', input.commit);
-  }
-
-  if (input.instructions?.trim()) {
-    args.push(input.instructions.trim());
-  }
-
-  const result = await runCodexCommand(args, input);
-  const elapsedMs = Math.round(performance.now() - startedAt);
-
-  if (result.exitCode !== 0) {
-    return buildFailurePayload(`native-review:${input.mode}`, elapsedMs, result);
-  }
-
-  return {
-    ok: true,
-    mode: `native-review:${input.mode}`,
-    elapsedMs,
-    content: result.lastMessage?.trim() || result.stdout.trim() || 'Codex produced no final output.',
-  };
 }

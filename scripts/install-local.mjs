@@ -8,7 +8,7 @@ const commandsSource = join(repoRoot, 'claude', 'commands');
 const claudeRoot = join(homedir(), '.claude');
 const mcpConfigPath = join(claudeRoot, '.mcp.json');
 const commandsTargetRoot = resolve(join(claudeRoot, 'commands'));
-const serverEntry = join(repoRoot, 'dist', 'server.js');
+const serverEntry = join(repoRoot, 'dist', 'src', 'server.js');
 const commandNames = ['codexplan.md', 'codexreview.md', 'codexsession.md'];
 
 mkdirSync(commandsTargetRoot, { recursive: true });

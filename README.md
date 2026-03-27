@@ -27,6 +27,7 @@ That will:
 
 - add `claude-codex-bridge` to `~/.claude/.mcp.json`
 - symlink the command files into `~/.claude/commands`
+- point Claude at `dist/src/server.js`
 
 ## Dev
 

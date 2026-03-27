@@ -1,5 +1,13 @@
 import type { CodexPlanInput, CodexReviewInput } from './types.js';
 
+function buildPathScopeBlock(paths?: string[]): string {
+  if (!paths || paths.length === 0) {
+    return '';
+  }
+
+  return `Focus paths:\n${paths.map((path) => `- ${path}`).join('\n')}`;
+}
+
 export function buildPlanPrompt(input: CodexPlanInput): string {
   const contextBlock = input.contextPaths && input.contextPaths.length > 0
     ? `Priority context paths:\n${input.contextPaths.map((path) => `- ${path}`).join('\n')}`
@@ -31,6 +39,7 @@ export function buildPlanPrompt(input: CodexPlanInput): string {
 
 export function buildSessionReviewPrompt(input: CodexReviewInput, scopeDescription: string): string {
   const extraInstructions = input.instructions?.trim() ? `Additional instructions:\n${input.instructions.trim()}` : '';
+  const pathScope = buildPathScopeBlock(input.paths);
 
   return [
     'You are Codex acting as an independent code reviewer for Claude Code.',
@@ -41,6 +50,8 @@ export function buildSessionReviewPrompt(input: CodexReviewInput, scopeDescripti
     '',
     'Session scope:',
     scopeDescription,
+    '',
+    pathScope,
     '',
     extraInstructions,
     '',
