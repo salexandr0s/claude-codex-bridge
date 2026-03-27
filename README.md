@@ -8,6 +8,13 @@ Local MCP-backed bridge that lets Claude Code delegate planning and review work 
 - `/codexreview` — review work done in the current repo session
 - `/codexsession` — show or reset the repo baseline used for session review
 
+Examples:
+- `/codexreview`
+- `/codexreview uncommitted`
+- `/codexreview base main`
+- `/codexreview commit abc123`
+- `/codexreview base main focus on auth and tests`
+
 ## How it works
 
 - Claude talks to a local MCP server from this repo.
