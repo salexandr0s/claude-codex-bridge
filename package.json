@@ -1,0 +1,35 @@
+{
+  "name": "claude-codex-bridge",
+  "version": "0.1.0",
+  "description": "Local MCP-backed bridge that lets Claude delegate planning and review tasks to Codex CLI.",
+  "main": "dist/server.js",
+  "scripts": {
+    "test": "vitest run",
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/server.ts",
+    "lint": "eslint . --ext .ts",
+    "verify": "npm run lint && npm run build && npm run test",
+    "install:local": "node scripts/install-local.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.28.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^25.5.0",
+    "@typescript-eslint/eslint-plugin": "^8.57.2",
+    "@typescript-eslint/parser": "^8.57.2",
+    "eslint": "^10.1.0",
+    "globals": "^17.4.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.57.2",
+    "vitest": "^4.1.2"
+  }
+}
