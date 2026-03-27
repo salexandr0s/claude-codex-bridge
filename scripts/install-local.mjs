@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { mkdirSync, readFileSync, symlinkSync, writeFileSync, existsSync, lstatSync, unlinkSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync, existsSync, lstatSync, unlinkSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 
@@ -24,7 +24,7 @@ for (const name of commandNames) {
     }
   }
 
-  symlinkSync(source, target);
+  copyFileSync(source, target);
 }
 
 let config = {};
@@ -38,5 +38,5 @@ config['claude-codex-bridge'] = {
 };
 
 writeFileSync(mcpConfigPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
-console.log(`Installed Claude commands into ${commandsTargetRoot}`);
+console.log(`Copied Claude commands into ${commandsTargetRoot}`);
 console.log(`Updated MCP config at ${mcpConfigPath}`);
