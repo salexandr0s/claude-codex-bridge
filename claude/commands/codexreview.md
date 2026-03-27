@@ -1,7 +1,7 @@
 ---
 description: Review work done in this repo session via Codex
 ---
-Use the `codex_review` tool.
+Delegate review to Codex with the `codex_review` tool.
 
 Inputs:
 - `cwd`: current working directory
@@ -13,7 +13,23 @@ Behavior:
 - If the tool reports a dirty-start repository, explain that the baseline was not created and recommend either:
   - one-off uncommitted review, or
   - resetting the baseline once the user is ready
+- Preserve the Codex review as the primary review artifact.
+- Do not dilute severity or remove concrete findings.
 
-Return:
-1. The Codex review first
-2. A short Claude summary with the top findings
+Output format:
+1. `## Codex Review`
+   - Paste the tool output as-is
+2. `## Claude Summary`
+   - include:
+     - verdict
+     - top 1-3 findings
+     - immediate next step
+
+If the tool initialized a new baseline instead of reviewing:
+- explain that no review was run yet
+- tell the user that the next `/codexreview` will review work since that baseline
+
+If the tool reports a dirty-start repository:
+- explain the repo was already dirty before a baseline existed
+- recommend `/codexsession reset` once the user wants a fresh baseline
+- mention that a one-off uncommitted review is the fallback
